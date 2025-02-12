@@ -1,0 +1,357 @@
+
+```{r}
+library(tidyverse)
+library(imputeTS)
+library(kernlab)
+library(caret)
+library(readr)
+# Importing data from CSV file
+data <- read.csv("https://intro-datascience.s3.us-east-2.amazonaws.com/HMO_data.csv", stringsAsFactors = FALSE)
+set.seed(0)
+#Interpolating NA's in bmi column
+data$bmi <- na_interpolation(data$bmi)
+data$hypertension <- na_interpolation(data$hypertension)
+data$cost <- na_interpolation(data$cost)
+
+Conn <- data %>% filter(location == 'CONNECTICUT')%>%
+group_by(location_type = 'Country')
+meanConn = mean(Conn$cost)
+Rho <- data %>% filter(location == 'RHODE ISLAND')
+meanRho = mean(Rho$cost)
+Penn <- data %>% filter(location == 'PENNSYLVANIA')
+meanPenn = mean(Penn$cost)
+Njer <- data %>% filter(location == 'NEW JERSEY')
+meanNjer = mean(Njer$cost)
+Nyork <- data %>% filter(location == 'NEW YORK')
+meanNyork = mean(Nyork$cost)
+Mary <- data %>% filter(location == 'MARYLAND')
+meanMary = mean(Mary$cost)
+Mass <- data %>% filter(location == 'MASSACHUSETTS')
+meanMass = mean(Mass$cost)
+
+#Creating Expensive column
+for(i in 1:nrow(data))
+{
+if((data$location[i] == 'MARYLAND') && (data$cost[i] > meanMary)){
+  data$expensive_type[i] <- 'Expensive'
+}else if((data$location[i] == 'MASSACHUSETTS') && (data$cost[i] > meanMass)){
+  data$expensive_type[i] <- 'Expensive'
+}else if((data$location[i] == 'NEW YORK') && (data$cost[i] > meanNyork)){
+  data$expensive_type[i] <- 'Expensive'
+}else if((data$location[i] == 'NEW JERSEY') && (data$cost[i] > meanNjer)){
+  data$expensive_type[i] <- 'Expensive'  
+}else if((data$location[i] == 'PENNSYLVANIA') && (data$cost[i] > meanPenn)){
+  data$expensive_type[i] <- 'Expensive' 
+}else if((data$location[i] == 'RHODE ISLAND') && (data$cost[i] > meanRho)){
+  data$expensive_type[i] <- 'Expensive' 
+}else if((data$location[i] == 'CONNECTICUT') && (data$cost[i] > meanConn)){
+  data$expensive_type[i] <- 'Expensive' 
+}else 
+  data$expensive_type[i] <- 'Not Expensive'
+}
+
+
+data$expensive_type <- as.factor(data$expensive_type)
+data$smoker = factor(data$smoker,levels = c('yes', 'no'),labels = c(0,1))
+data$exercise = factor(data$exercise,levels = c('Active', 'Not-Active'),labels = c(0,1))
+data$expensive_type = factor(data$expensive_type,levels = c('Not Expensive', 'Expensive'),labels = c(0,1))
+
+
+trainList <-createDataPartition(y=data$expensive_type,p=.40,list=FALSE)
+trainSet <- data[trainList,]
+testSet <- data[-trainList,]
+svm_model <- function(testSet){
+
+ library(kernlab)
+  library(caret)
+    library(readr)
+svmModel <- ksvm(expensive_type ~bmi+smoker+exercise+hypertension,data=trainSet,C=2,cross=2,prob.model=TRUE)
+predOut2_df<-data.frame(predOut2 <- predict(svmModel,newdata=testSet,type="response"))
+print(predOut2_df)
+}
+
+svm_model(testSet)
+
+save(svm_model, file = 'model.rda')
+```
+
+
+
+```{r}
+library(shiny)
+library(DT)
+library(tidyverse)
+library(hrbrthemes)
+library(ggplot2)
+library(purrr)
+library(dplyr)
+library(imputeTS)
+library(forecast)
+library(tidyverse)
+
+
+#Reading the data
+data <- read.csv("https://intro-datascience.s3.us-east-2.amazonaws.com/HMO_data.csv", stringsAsFactors = FALSE)
+#7,582 X 14
+
+load("model.rda")    # Load SVM model
+
+.theme<- theme(
+  axis.line = element_line(colour = 'blue', size = .75),
+  panel.background = element_blank(),
+  plot.background = element_blank()
+)
+
+
+
+# UI for app
+ui<-(pageWithSidebar(
+  # title
+  headerPanel("Health Cost Data Prediction"),
+
+  #input
+  sidebarPanel
+  (
+    # Input: Select a file ----
+
+    fileInput("file1", "Choose CSV File for EDA",
+              multiple = TRUE,
+              accept = c("text/csv",
+                         "text/comma-separated-values,text/plain",
+                         ".csv")),
+    # Input: Checkbox if file has header ----
+    checkboxInput("header", "Header", TRUE),
+    
+    fileInput("file2", "Choose CSV File of Test Data",
+              multiple = TRUE,
+              accept = c("text/csv",
+                         "text/comma-separated-values,text/plain",
+                         ".csv")),
+    # Input: Checkbox if file has header ----
+    checkboxInput("header", "Header", TRUE),
+
+    # Input: Select separator ----
+    radioButtons("sep", "Separator",
+                 choices = c(Semicolon = ";",
+                             Comma = ",",
+                             Tab = "\t"),
+                 selected = ","),
+    # Horizontal line ----
+    tags$hr(),
+
+
+    # Input: Select what to display
+    selectInput("dataset","Data:",
+                choices =list(uploaded_file = "inFile"), selected=NULL),
+    selectInput("variable","Variable:", choices = NULL),
+    selectInput("group","Group:", choices = NULL),
+    selectInput("plot.type","Plot Type:",
+                list(boxplot = "boxplot", histogram = "histogram", density = "density", bar = "bar")
+    ),
+    checkboxInput("show.points", "show points", TRUE)
+  ),
+
+  # output
+  mainPanel(
+    tabsetPanel(
+        id = "uploaded_file",
+        tabPanel("VISUALIZATIONS", uiOutput("plot"),type=4),
+        tabPanel("PREDICTIONS", downloadButton("downloadData", em('Download Predictions',style="text-align:center;color:blue;font-size:150%")),uiOutput("sample_input_data_heading"),
+                             tableOutput("sample_input_data"),uiOutput("sample_prediction_heading"),tableOutput("sample_predictions"))
+        
+        )
+  )
+))
+
+
+# shiny server side code for each call
+server<-(function(input, output, session){
+
+  #update group and
+  #variables based on the data
+  observe({
+  #browser()
+    if(!exists(input$dataset)) return() #make sure upload exists
+    var.opts<-colnames(get(input$dataset))
+    updateSelectInput(session, "variable", choices = var.opts)
+    updateSelectInput(session, "group", choices = var.opts)
+  })
+  
+  
+  output$caption<-renderText({
+    switch(input$plot.type,
+           "boxplot" 	= 	"Boxplot",
+           "histogram" =	"Histogram",
+           "density" 	=	"Density plot",
+           "bar" 		=	"Bar graph")
+  })
+
+
+  output$plot <- renderUI({
+    plotOutput("p")
+  })
+
+  #get data object
+  get_data<-reactive({
+
+    if(!exists(input$dataset)) return() # if no upload
+
+    check<-function(x){is.null(x) || x==""}
+    if(check(input$dataset)) return()
+
+    obj<-list(data=get(input$dataset),
+          variable=input$variable,
+          group=input$group
+    )
+
+    #require all to be set to proceed
+    if(any(sapply(obj,check))) return()
+    #make sure choices had a chance to update
+    check<-function(obj){
+      !all(c(obj$variable,obj$group) %in% colnames(obj$data))
+    }
+
+    if(check(obj)) return()
+
+
+    obj
+
+  })
+
+  #plotting function using ggplot2
+  output$p <- renderPlot({
+
+    plot.obj<-get_data()
+
+    #conditions for plotting
+    if(is.null(plot.obj)) return()
+
+    #make sure variable and group have loaded
+    if(plot.obj$variable == "" | plot.obj$group =="") return()
+
+    #plot types
+    plot.type<-switch(input$plot.type,
+                      "boxplot" 	= geom_boxplot(),
+                      "histogram" =	geom_histogram(alpha=0.5,position="identity"),
+                      "density" 	=	geom_density(alpha=.75),
+                      "bar" 		=	geom_bar(position="dodge")
+    )
+
+
+    if(input$plot.type=="boxplot")	{		#control for 1D or 2D graphs
+      p<-ggplot(plot.obj$data,
+                aes_string(
+                  x 		= plot.obj$group,
+                  y 		= plot.obj$variable,
+                  fill 	= plot.obj$group # let type determine plotting
+                )
+      ) + plot.type
+
+      if(input$show.points==TRUE)
+      {
+        p<-p+ geom_point(color='black',alpha=0.5, position = 'jitter')
+      }
+
+    } else {
+
+      p<-ggplot(plot.obj$data,
+                aes_string(
+                  x 		= plot.obj$variable,
+                  fill 	= plot.obj$group,
+                  group 	= plot.obj$group
+                  #color 	= as.factor(plot.obj$group)
+                )
+      ) + plot.type
+    }
+
+    p<-p+labs(
+      fill 	= input$group,
+      x 		= "",
+      y 		= input$variable
+    )  +
+      .theme
+    print(p)
+  })
+
+  # set uploaded file
+  upload_data<-reactive({
+
+    inFile <- input$file1
+
+    if (is.null(inFile))
+      return(NULL)
+
+    #could also store in a reactiveValues
+    read.csv(inFile$datapath,
+             header = input$header,
+             sep = input$sep)
+  })
+
+  observeEvent(input$file1,{
+    inFile<<-upload_data()
+  })
+
+    output$sample_input_data_heading = renderUI({   # show only if data has been uploaded
+    inFile2 <- input$file2
+    
+    if (is.null(inFile2)){
+      return(NULL)
+    }else{
+      tags$h4('Sample test data')
+    }
+   })
+    output$sample_input_data = renderTable({    # show sample of uploaded data
+    inFile2 <- input$file2
+    
+    if (is.null(inFile2)){
+      return(NULL)
+    }else{
+      input_data =  readr::read_csv(input$file2$datapath, col_names = TRUE)
+      head(input_data)
+    }
+  })
+    
+    output$sample_prediction_heading = renderUI({  # show only if data has been uploaded
+            inFile2 <- input$file2
+
+            if (is.null(inFile2)){
+              return(NULL)
+            }else{
+              tags$h4('Sample predictions')
+            }
+            })
+
+    output$conf = renderPrint({
+          #predOut2_df
+          #print(conf <- confusionMatrix(predict(svm_model,newdata=testSet,type="response"),testSet$expensive_type))
+       })
+    
+    output$sample_predictions = renderTable({ #Display a sample of the predictions
+      
+          svm_model(testSet)
+          
+        
+
+        })
+
+      # Downloadable csv of predictions ----
+
+output$downloadData <- downloadHandler(
+  filename = function() {
+    paste("input_data_with_predictions", ".csv", sep = "")
+  },
+  content = function(file) {
+    write.csv(svm_model(testSet), file, row.names = FALSE)
+  })
+
+})
+
+
+# Create Shiny app ----
+shinyApp(ui, server)
+
+
+
+
+```
+

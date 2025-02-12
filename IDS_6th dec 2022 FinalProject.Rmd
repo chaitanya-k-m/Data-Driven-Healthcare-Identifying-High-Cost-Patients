@@ -1,0 +1,352 @@
+---
+title: "Group 3 Project"
+output: html_notebook
+---
+```{r}
+# Importing data from CSV file
+data <- read.csv("https://intro-datascience.s3.us-east-2.amazonaws.com/HMO_data.csv", stringsAsFactors = FALSE)
+```
+
+```{r}
+library(tidyverse)
+head(data,10)
+```
+
+```{r}
+str(data)
+
+#Total of 7582 rows with 14 columns
+#The attributes present are : 
+#X- Unique ID number
+#Age - Age of person - Discrete numeric data
+#BMI - Body Mass Index of person - Continous numeric data
+#Children - The number of children they have - Discrete numeric data
+#Smoker - Whethere they are smoker or not - Nominal Categorical data
+#Location - Where they are located - Nominal Categorical data
+#Location_type - Whether they stay in Urban/Country area- Nominal Categorical data
+#Education_Level - Education level category - Ordinal Categorical data 
+#Yearly_physical - Whether they have physical activity or not in that year - Nominal categorical data
+#Exercise - Whether they are in exercise everyday - Nominal categorical data 
+#Married - Marital Status - Nominal categorical data 
+#Hypertension - Whether diagnosed with hypertension-Dummy categorical data
+```
+
+```{r}
+#summarising all attributes - minimum,mean,median,maximum,1st quartile,3rd quartile
+summary(data)
+```
+
+```{r}
+#install.packages("imputeTS")
+```
+
+```{r}
+library("imputeTS")
+#Interpolating NA's in bmi column
+data$bmi <- na_interpolation(data$bmi)
+sum(is.na(data$bmi))
+```
+
+```{r}
+library("imputeTS")
+#Interpolating NA's in hypertension column
+data$hypertension <- na_interpolation(data$hypertension)
+sum(is.na(data$hypertension))
+```
+
+```{r}
+library("imputeTS")
+#Interpolating NA's in cost column
+data$cost <- na_interpolation(data$cost)
+sum(is.na(data$cost))
+```
+
+```{r}
+#Examining cost attribute
+#Finding row with lowest cost
+data[which.min(data$cost),]
+#Finding row with highest cost
+data[which.max(data$cost),]
+```
+
+```{r}
+#Examining bmi attribute
+#Finding row with lowest cost
+data[which.min(data$bmi),]
+#Finding row with highest cost
+data[which.max(data$bmi),]
+```
+
+```{r}
+library(ggplot2)
+histcost <- ggplot(data) + aes(x=cost) + geom_histogram(col="blue",fill="white")+ ggtitle("Distribution of Cost")
+histcost
+```
+
+
+```{r}
+histbmi <- ggplot(data) + aes(x=bmi) + geom_histogram(col="blue",fill="white")+ ggtitle("Distribution of Cost")
+histbmi
+```
+
+```{r}
+scattercostage <- ggplot(data) + aes(x=age,y=cost) + geom_point(col="light blue",fill="white")+ ggtitle("Scatterplot of Cost Vs Age")+geom_smooth(method="lm", se=TRUE)
+scattercostage
+```
+
+```{r}
+boxcostmarried <- ggplot(data) + aes(x=married,y=cost) + geom_boxplot(col="blue",fill="white")+ ggtitle("Box plot of Married vs Non Married distribution over Cost")
+boxcostmarried
+```
+
+```{r}
+library(tidyverse)
+Conn <- data %>% filter(location == 'CONNECTICUT')%>%
+group_by(location_type = 'Country')
+meanConn = mean(Conn$cost)
+meanConn
+Rho <- data %>% filter(location == 'RHODE ISLAND')
+meanRho = mean(Rho$cost)
+meanRho
+Penn <- data %>% filter(location == 'PENNSYLVANIA')
+meanPenn = mean(Penn$cost)
+meanPenn
+Njer <- data %>% filter(location == 'NEW JERSEY')
+meanNjer = mean(Njer$cost)
+meanNjer
+Nyork <- data %>% filter(location == 'NEW YORK')
+meanNyork = mean(Nyork$cost)
+meanNyork
+Mary <- data %>% filter(location == 'MARYLAND')
+meanMary = mean(Mary$cost)
+meanMary
+Mass <- data %>% filter(location == 'MASSACHUSETTS')
+meanMass = mean(Mass$cost)
+meanMass
+```
+
+
+```{r}
+#Creating Expensive column
+for(i in 1:nrow(data))
+{
+if((data$location[i] == 'MARYLAND') && (data$cost[i] > meanMary)){
+  data$expensive_type[i] <- 'Expensive'
+}else if((data$location[i] == 'MASSACHUSETTS') && (data$cost[i] > meanMass)){
+  data$expensive_type[i] <- 'Expensive'
+}else if((data$location[i] == 'NEW YORK') && (data$cost[i] > meanNyork)){
+  data$expensive_type[i] <- 'Expensive'
+}else if((data$location[i] == 'NEW JERSEY') && (data$cost[i] > meanNjer)){
+  data$expensive_type[i] <- 'Expensive'  
+}else if((data$location[i] == 'PENNSYLVANIA') && (data$cost[i] > meanPenn)){
+  data$expensive_type[i] <- 'Expensive' 
+}else if((data$location[i] == 'RHODE ISLAND') && (data$cost[i] > meanRho)){
+  data$expensive_type[i] <- 'Expensive' 
+}else if((data$location[i] == 'CONNECTICUT') && (data$cost[i] > meanConn)){
+  data$expensive_type[i] <- 'Expensive' 
+}else 
+  data$expensive_type[i] <- 'Not Expensive'
+}
+```
+
+```{r}
+table(data$expensive_type)
+expensive <-data[data$expensive_type=='Expensive',]
+table(expensive$smoker)
+table(expensive$age)
+table(expensive$exercise)
+hist(expensive$bmi)
+table(expensive$hypertension)
+```
+
+```{r}
+library(ggplot2)
+MyPlot <- ggplot(data, aes(x=age))
+MyPlot <- MyPlot + geom_point(aes(y=bmi,color=smoker))
+MyPlot
+```
+
+```{r}
+library(ggplot2)
+MyPlot <- ggplot(data, aes(x=age))
+MyPlot <- MyPlot + geom_point(aes(y=bmi,color=expensive_type))
+MyPlot
+```
+
+
+```{r}
+library(ggplot2)
+MyPlot <- ggplot(data, aes(x=age))
+MyPlot <- MyPlot + geom_point(aes(y=bmi,color=exercise))
+MyPlot
+```
+
+
+```{r}
+library(MASS)
+library(ggplot2)
+ggplot(data=data) + aes(x=bmi, y=cost) + geom_point(aes(color=exercise)) +
+ geom_smooth(method="lm", se=TRUE)
+```
+
+
+```{r}
+set.seed(4)
+library(kernlab)
+library(caret)
+trainList <-createDataPartition(y=data$expensive_type,p=.40,list=FALSE)
+```
+
+
+```{r}
+trainSet <- data[trainList,]
+testSet <- data[-trainList,]
+data$expensive_type <- as.factor(data$expensive_type)
+```
+
+
+
+```{r}
+svmModel <- ksvm(expensive_type ~age+bmi+smoker+exercise+hypertension,data=trainSet,C=2,cross=2,prob.model=TRUE)
+
+```
+
+
+
+
+```{r}
+predOut3 <- predict(svmModel,newdata=testSet,type="response")
+
+```
+
+```{r}
+library(caret)
+confusionMatrix(predOut3,testSet$expensive_type)
+```
+
+Regression model
+
+```{r}
+library(MASS)
+lmOut <- lm(formula = cost ~ex,data=data)
+summary(lmOut)
+```
+
+Tree model
+
+```{r}
+#install.packages("e1071")
+library(e1071)
+library(rpart)
+tree<-rpart(expensive_type ~ bmi+exercise+smoker, data = trainSet, method = "class")
+#creating tree model with all columns used for predicting.
+
+library(rpart.plot)
+rpart.plot(tree) #plot the tree model
+
+```
+```{r}
+library(caret) 
+predTree <-predict(tree,testSet, type = "class") #predicting the output
+confusionMatrix(predTree,testSet$expensive_type) #plotting the confusion matrix
+```
+
+
+```{r}
+table(data$hypertension)
+```
+
+
+```{r}
+hist(data$hypertension)
+```
+
+
+```{r}
+library(ggplot2)
+MyPlot3 <- ggplot(data, aes(x=age))
+MyPlot3 <- MyPlot3 + geom_point(aes(y=hypertension,color=age))
+MyPlot3
+```
+
+
+```{r}
+library(ggplot2)
+MyPlot4 <- ggplot(data,aes(color=age))
+MyPlot4 <- MyPlot4 + geom_bar(aes(x=hypertension))
+MyPlot4
+```
+
+```{r}
+help("ksvm")
+```
+
+```{r}
+```
+
+
+```{r}
+library(ggplot2)
+myplot5 <- ggplot(data) + aes(x=smoker,y=cost,fill=smoker) + geom_boxplot(col="black",)+ ggtitle("Box plot of Smoker vs Non Smoker distribution over Cost")
+myplot5
+```
+
+
+```{r}
+```
+
+```{r}
+library(ggplot2)
+myplot5 <- ggplot(data) + aes(x=age,y=cost) + geom_bin2d()+ ggtitle("Heat Map of Age distribution over Cost")
+myplot5
+```
+```{r}
+library(ggplot2)
+myplot5 <- ggplot(data) + aes(x=bmi) + geom_histogram
+(col="black")+ ggtitle("Box plot of Age distribution over Cost")
+myplot5
+```
+```{r}
+hist(data$bmi)
+```
+
+```{r}
+library(MASS)
+library(ggplot2)
+ggplot(data=data) + aes(x=age, y=bmi) + geom_point(aes(color=exercise)) +
+ geom_smooth(method="lm", se=TRUE)
+```
+```{r}
+```
+
+
+```{r}
+library(MASS)
+library(ggplot2)
+ggplot(data=data) + aes(x=location_type, y=cost) + geom_bin2d(aes()) +
+ geom_smooth(method="lm", se=TRUE)
+```
+
+
+```{r}
+library(MASS)
+library(ggplot2)
+ggplot(data=data) + aes(x=children, y=cost) + geom_point() +
+ geom_smooth(method="lm", se=TRUE)
+```
+
+```{r}
+library(MASS)
+library(ggplot2)
+ggplot(data=data) + aes(x=bmi, y=cost) + geom_point(aes(color=age)) +
+ geom_smooth(method="lm", se=TRUE)
+```
+```{r}
+library(MASS)
+library(ggplot2)
+ggplot(data=data) + aes(x=location_type, y=cost) + geom_boxplot(aes()) +
+ geom_smooth(method="lm", se=TRUE)
+```
+
+
+
